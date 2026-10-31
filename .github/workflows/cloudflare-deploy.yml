@@ -1,10 +1,6 @@
 name: Cloudflare deploy
 
-# Verify, build and deploy a site to Cloudflare Workers.
-#
-# Requires .node-version. When package.json exists, `lint` and `build` scripts
-# are required and `typecheck` and `test` run when present. Without package.json
-# the repo is deployed as-is. Deploys only from the default branch.
+# Lint, typecheck, test, build and deploy a site to Cloudflare Workers.
 
 on:
   workflow_call:
@@ -41,12 +37,14 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # A newer run on the same branch cancels the running one.
     concurrency:
       group: cloudflare-deploy-${{ github.ref }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Outputs which steps to run; fails on missing required files or scripts.
       - name: Detect project
         id: project
         run: |
@@ -55,6 +53,7 @@ jobs:
             exit 1
           fi
 
+          # No package.json: plain static site, skip straight to deploy.
           if [ ! -f package.json ]; then
             echo "npm=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -75,6 +74,7 @@ jobs:
             fi
           done
 
+      # Caches npm downloads only for npm projects.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
@@ -92,8 +92,7 @@ jobs:
       - if: steps.project.outputs.test == 'true'
         run: npm test
 
-      # Key files discard the cache, content files restore the previous entry
-      # so only what changed gets rebuilt.
+      # Key is <key files hash>-<content files hash>; content changes restore the previous cache.
       - name: Compute cache key
         id: cache-key
         if: inputs.cache-path != ''
@@ -115,6 +114,7 @@ jobs:
           key: ${{ steps.cache-key.outputs.key }}
           restore-keys: ${{ steps.cache-key.outputs.prefix }}
 
+      # Exports each KEY=value line of build-env, for this step only.
       - if: steps.project.outputs.build == 'true'
         env:
           BUILD_ENV: ${{ inputs.build-env }}
@@ -124,6 +124,7 @@ jobs:
           done <<< "$BUILD_ENV"
           npm run build
 
+      # Default branch only; prefers the repo's own wrangler.
       - name: Deploy
         if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
         env:
