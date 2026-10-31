@@ -35,7 +35,8 @@ jobs:
       group: cloudflare-ci-${{ github.ref }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Outputs which steps to run; fails on missing required files or scripts.
       - name: Detect project
@@ -68,21 +69,26 @@ jobs:
           done
 
       # Caches npm downloads only for npm projects.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
           cache: ${{ steps.project.outputs.npm == 'true' && 'npm' || '' }}
 
-      - if: steps.project.outputs.npm == 'true'
+      - name: Install
+        if: steps.project.outputs.npm == 'true'
         run: npm ci
 
-      - if: steps.project.outputs.lint == 'true'
+      - name: Lint
+        if: steps.project.outputs.lint == 'true'
         run: npm run lint
 
-      - if: steps.project.outputs.typecheck == 'true'
+      - name: Typecheck
+        if: steps.project.outputs.typecheck == 'true'
         run: npm run typecheck
 
-      - if: steps.project.outputs.test == 'true'
+      - name: Test
+        if: steps.project.outputs.test == 'true'
         run: npm test
 
       # Hashes the git blob ids of cache-files into the cache key.
@@ -95,14 +101,16 @@ jobs:
           read -ra files <<< "$CACHE_FILES"
           echo "key=build-cache-$(git ls-files -s -- "${files[@]}" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
-      - if: inputs.cache-path != ''
+      - name: Restore cache
+        if: inputs.cache-path != ''
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ inputs.cache-path }}
           key: ${{ steps.cache-key.outputs.key }}
 
       # Exports each KEY=value line of build-env, for this step only.
-      - if: steps.project.outputs.build == 'true'
+      - name: Build
+        if: steps.project.outputs.build == 'true'
         env:
           BUILD_ENV: ${{ inputs.build-env }}
         run: |
