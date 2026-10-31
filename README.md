@@ -4,7 +4,7 @@ Shared GitHub Actions workflows.
 
 ## Cloudflare deploy
 
-Lints, typechecks, tests, builds and deploys a site to Cloudflare Workers. Deploys only from the default branch.
+Lints, typechecks, tests, builds and deploys a site to Cloudflare Workers. Deploys only from `main`.
 
 ```yaml
 # .github/workflows/deploy.yml
@@ -28,4 +28,4 @@ The repo needs:
 - `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets
 - With `package.json`: npm, plus `lint` and `build` scripts. `typecheck` and `test` run when present.
 
-Optional inputs (`build-env`, `cache-*`, `wrangler-version`) are described in the workflow file.
+Optional inputs (`build-env`, `cache-path`, `cache-files`) are described in the workflow file.
