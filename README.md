@@ -2,13 +2,13 @@
 
 Shared GitHub Actions workflows.
 
-## Cloudflare deploy
+## Cloudflare CI
 
 Lints, typechecks, tests, builds and deploys a site to Cloudflare Workers. Deploys only from `main`.
 
 ```yaml
-# .github/workflows/deploy.yml
-name: Deploy
+# .github/workflows/ci.yml
+name: CI
 
 on:
   push:
@@ -17,8 +17,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
-    uses: brenttimmermans/github-actions/.github/workflows/cloudflare-deploy.yml@v1
+  ci:
+    uses: brenttimmermans/github-actions/.github/workflows/cloudflare-ci.yml@v1
     secrets: inherit
 ```
 

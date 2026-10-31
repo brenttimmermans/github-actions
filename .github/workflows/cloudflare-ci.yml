@@ -1,4 +1,4 @@
-name: Cloudflare deploy
+name: Cloudflare CI
 
 # Lint, typecheck, test, build and deploy a site to Cloudflare Workers.
 
@@ -27,10 +27,12 @@ permissions:
 
 jobs:
   deploy:
+    # Matches the Deploy step's condition, so PRs show "verify".
+    name: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'verify & deploy' || 'verify' }}
     runs-on: ubuntu-latest
     # A newer run on the same branch cancels the running one.
     concurrency:
-      group: cloudflare-deploy-${{ github.ref }}
+      group: cloudflare-ci-${{ github.ref }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
