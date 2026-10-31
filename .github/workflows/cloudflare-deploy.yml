@@ -1,0 +1,137 @@
+name: Cloudflare deploy
+
+# Verify, build and deploy a site to Cloudflare Workers.
+#
+# Requires .node-version. When package.json exists, `lint` and `build` scripts
+# are required and `typecheck` and `test` run when present. Without package.json
+# the repo is deployed as-is. Deploys only from the default branch.
+
+on:
+  workflow_call:
+    inputs:
+      build-env:
+        description: Extra environment variables for the build, one KEY=value per line. Not for secrets.
+        type: string
+        default: ''
+      cache-path:
+        description: Build output to cache between runs, e.g. generated images.
+        type: string
+        default: ''
+      cache-key-files:
+        description: Space-separated paths whose change discards the cache.
+        type: string
+        default: ''
+      cache-content-files:
+        description: Space-separated paths whose change rebuilds on top of the previous cache.
+        type: string
+        default: ''
+      wrangler-version:
+        description: Wrangler version for repos that don't have it as a dependency.
+        type: string
+        default: 4.155.0
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cloudflare-deploy-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Detect project
+        id: project
+        run: |
+          if [ ! -f .node-version ]; then
+            echo "::error::.node-version is required"
+            exit 1
+          fi
+
+          if [ ! -f package.json ]; then
+            echo "npm=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ ! -f package-lock.json ]; then
+            echo "::error::package-lock.json is required, use npm"
+            exit 1
+          fi
+          echo "npm=true" >> "$GITHUB_OUTPUT"
+
+          for script in lint typecheck test build; do
+            if jq -e --arg s "$script" '.scripts[$s]' package.json > /dev/null; then
+              echo "$script=true" >> "$GITHUB_OUTPUT"
+            elif [ "$script" = lint ] || [ "$script" = build ]; then
+              echo "::error::package.json needs a \"$script\" script"
+              exit 1
+            fi
+          done
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: ${{ steps.project.outputs.npm == 'true' && 'npm' || '' }}
+
+      - if: steps.project.outputs.npm == 'true'
+        run: npm ci
+
+      - if: steps.project.outputs.lint == 'true'
+        run: npm run lint
+
+      - if: steps.project.outputs.typecheck == 'true'
+        run: npm run typecheck
+
+      - if: steps.project.outputs.test == 'true'
+        run: npm test
+
+      # Key files discard the cache, content files restore the previous entry
+      # so only what changed gets rebuilt.
+      - name: Compute cache key
+        id: cache-key
+        if: inputs.cache-path != ''
+        env:
+          KEY_FILES: ${{ inputs.cache-key-files }}
+          CONTENT_FILES: ${{ inputs.cache-content-files }}
+        run: |
+          set -f
+          key=$(git ls-files -s -- $KEY_FILES | sha256sum | cut -c1-16)
+          content=$(git ls-files -s -- $CONTENT_FILES | sha256sum | cut -c1-16)
+          echo "prefix=build-cache-$key-" >> "$GITHUB_OUTPUT"
+          echo "key=build-cache-$key-$content" >> "$GITHUB_OUTPUT"
+
+      - if: inputs.cache-path != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ inputs.cache-path }}
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: ${{ steps.cache-key.outputs.prefix }}
+
+      - if: steps.project.outputs.build == 'true'
+        env:
+          BUILD_ENV: ${{ inputs.build-env }}
+        run: |
+          while IFS= read -r line; do
+            [ -n "$line" ] && export "$line"
+          done <<< "$BUILD_ENV"
+          npm run build
+
+      - name: Deploy
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_VERSION: ${{ inputs.wrangler-version }}
+        run: |
+          if [ -x node_modules/.bin/wrangler ]; then
+            npx wrangler deploy
+          else
+            npx --yes "wrangler@$WRANGLER_VERSION" deploy
+          fi
