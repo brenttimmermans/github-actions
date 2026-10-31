@@ -101,9 +101,10 @@ jobs:
           KEY_FILES: ${{ inputs.cache-key-files }}
           CONTENT_FILES: ${{ inputs.cache-content-files }}
         run: |
-          set -f
-          key=$(git ls-files -s -- $KEY_FILES | sha256sum | cut -c1-16)
-          content=$(git ls-files -s -- $CONTENT_FILES | sha256sum | cut -c1-16)
+          read -ra key_files <<< "$KEY_FILES"
+          read -ra content_files <<< "$CONTENT_FILES"
+          key=$(git ls-files -s -- "${key_files[@]}" | sha256sum | cut -c1-16)
+          content=$(git ls-files -s -- "${content_files[@]}" | sha256sum | cut -c1-16)
           echo "prefix=build-cache-$key-" >> "$GITHUB_OUTPUT"
           echo "key=build-cache-$key-$content" >> "$GITHUB_OUTPUT"
 
@@ -119,7 +120,7 @@ jobs:
           BUILD_ENV: ${{ inputs.build-env }}
         run: |
           while IFS= read -r line; do
-            [ -n "$line" ] && export "$line"
+            [ -n "$line" ] && export "${line?}"
           done <<< "$BUILD_ENV"
           npm run build
 
